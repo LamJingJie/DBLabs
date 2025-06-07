@@ -9,6 +9,7 @@ import java.util.*;
  * TupleDesc describes the schema of a tuple.
  */
 public class TupleDesc implements Serializable {
+    private final List<TDItem> items = new ArrayList<>();
 
     /**
      * A help class to facilitate organizing the information of each field
@@ -44,7 +45,7 @@ public class TupleDesc implements Serializable {
      * */
     public Iterator<TDItem> iterator() {
         // some code goes here
-        return null;
+        return items.iterator();
     }
 
     private static final long serialVersionUID = 1L;
@@ -62,6 +63,14 @@ public class TupleDesc implements Serializable {
      */
     public TupleDesc(Type[] typeAr, String[] fieldAr) {
         // some code goes here
+        if (typeAr.length != fieldAr.length) {
+            throw new IllegalArgumentException("Type and Field arrays must have the same length");
+        }
+
+        for(int i =0; i < typeAr.length; i++){
+            TDItem tdItem = new TDItem(typeAr[i], fieldAr[i]);
+            this.items.add(tdItem);
+        }
     }
 
     /**
@@ -74,6 +83,10 @@ public class TupleDesc implements Serializable {
      */
     public TupleDesc(Type[] typeAr) {
         // some code goes here
+        for(int i = 0; i < typeAr.length; i ++){
+            TDItem tdItem = new TDItem(typeAr[i], null);
+            this.items.add(tdItem);
+        }
     }
 
     /**
@@ -81,7 +94,7 @@ public class TupleDesc implements Serializable {
      */
     public int numFields() {
         // some code goes here
-        return 0;
+        return this.items.size();
     }
 
     /**
@@ -95,7 +108,11 @@ public class TupleDesc implements Serializable {
      */
     public String getFieldName(int i) throws NoSuchElementException {
         // some code goes here
-        return null;
+        if (i < 0 || i >= this.items.size()){
+            new NoSuchElementException("Invalid index");
+        }
+
+        return this.items.get(i).fieldName;
     }
 
     /**
@@ -110,7 +127,11 @@ public class TupleDesc implements Serializable {
      */
     public Type getFieldType(int i) throws NoSuchElementException {
         // some code goes here
-        return null;
+        if (i < 0 || i >= this.items.size()){
+            new NoSuchElementException("Invalid index");
+        }
+
+        return this.items.get(i).fieldType;
     }
 
     /**
@@ -124,7 +145,12 @@ public class TupleDesc implements Serializable {
      */
     public int fieldNameToIndex(String name) throws NoSuchElementException {
         // some code goes here
-        return 0;
+        for (int i = 0; i < this.items.size(); i++){
+            if(this.items.get(i).fieldName != null && this.items.get(i).fieldName.equals(name)){
+                return i;
+            }
+        }
+        throw new NoSuchElementException("No field with name: " + name);
     }
 
     /**
@@ -133,7 +159,12 @@ public class TupleDesc implements Serializable {
      */
     public int getSize() {
         // some code goes here
-        return 0;
+        int totalByteSize = 0; // For the total byte size of the tuple
+        for (TDItem item : items) {
+            totalByteSize += item.fieldType.getLen();
+        }
+        return totalByteSize;
+
     }
 
     /**
@@ -148,7 +179,31 @@ public class TupleDesc implements Serializable {
      */
     public static TupleDesc merge(TupleDesc td1, TupleDesc td2) {
         // some code goes here
-        return null;
+
+        // Create an array of fixed size to hold its respective type and name
+        int totalFields = td1.numFields() + td2.numFields();
+        Type[] tdFieldType = new Type[totalFields];
+        String[] tdFieldName = new String[totalFields];
+
+        int index = 0;
+        Iterator<TDItem> td1Iterator = td1.iterator();
+        Iterator<TDItem> td2Iterator = td2.iterator();
+        while (td1Iterator.hasNext()){
+            TDItem item = td1Iterator.next();
+            tdFieldType[index] = item.fieldType;
+            tdFieldName[index] = item.fieldName;
+            index ++;
+        }
+
+        while (td2Iterator.hasNext()){
+            TDItem item = td2Iterator.next();
+            tdFieldType[index] = item.fieldType;
+            tdFieldName[index] = item.fieldName;
+            index ++;
+        }
+
+        TupleDesc merged = new TupleDesc(tdFieldType, tdFieldName);
+        return merged;
     }
 
     /**
@@ -164,13 +219,42 @@ public class TupleDesc implements Serializable {
 
     public boolean equals(Object o) {
         // some code goes here
+
+        if (o instanceof TupleDesc == false){
+            return false;
+        }
+
+        // Downcasting
+        TupleDesc other = (TupleDesc) o;
+     
+        // Check same number of items
+        if (this.items.size() == other.items.size()){
+            for (int i = 0; i < this.items.size(); i++){
+                TDItem thisItem = this.items.get(i);
+                TDItem otherItem = other.items.get(i);
+
+                // Check if ith type is not equal
+                if(!thisItem.fieldType.equals(otherItem.fieldType)){
+                    return false;
+                }
+            }
+            return true;
+        }
         return false;
     }
 
     public int hashCode() {
         // If you want to use TupleDesc as keys for HashMap, implement this so
         // that equal objects have equals hashCode() results
-        throw new UnsupportedOperationException("unimplemented");
+        int hash = 7;
+        Iterator<TDItem> it = iterator();
+        while(it.hasNext()) {
+            TDItem item = it.next();
+            hash = 31 * hash + (item.fieldType == null ? 0 : item.fieldType.hashCode());
+        }
+        
+        return hash;
+        // throw new UnsupportedOperationException("unimplemented");
     }
 
     /**
@@ -182,6 +266,23 @@ public class TupleDesc implements Serializable {
      */
     public String toString() {
         // some code goes here
-        return "";
+        StringBuilder sb = new StringBuilder();
+        for(int i = 0; i < items.size(); i++) {
+            TDItem item = items.get(i);
+            sb.append(item.fieldType.toString());
+
+            // Append field name
+            if (item.fieldName != null){
+                sb.append("(");
+                sb.append(item.fieldName);
+                sb.append(")");
+            }
+            
+            // If not the last item, append a comma
+            if (i != items.size() - 1){
+                sb.append(",");
+            }
+        }
+        return sb.toString();
     }
 }
