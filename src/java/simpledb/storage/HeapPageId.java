@@ -3,6 +3,9 @@ package simpledb.storage;
 /** Unique identifier for HeapPage objects. */
 public class HeapPageId implements PageId {
 
+    private final int tableId;
+    private final int pgNo;
+
     /**
      * Constructor. Create a page id structure for a specific page of a
      * specific table.
@@ -11,13 +14,14 @@ public class HeapPageId implements PageId {
      * @param pgNo The page number in that table.
      */
     public HeapPageId(int tableId, int pgNo) {
-        // some code goes here
+        this.tableId = tableId;
+        this.pgNo = pgNo
     }
 
     /** @return the table associated with this PageId */
     public int getTableId() {
         // some code goes here
-        return 0;
+        return tableId;
     }
 
     /**
@@ -26,7 +30,7 @@ public class HeapPageId implements PageId {
      */
     public int getPageNumber() {
         // some code goes here
-        return 0;
+        return pgNo;
     }
 
     /**
@@ -37,7 +41,7 @@ public class HeapPageId implements PageId {
      */
     public int hashCode() {
         // some code goes here
-        throw new UnsupportedOperationException("implement this");
+        return objects.hash(tableId,pgNo);
     }
 
     /**
@@ -48,6 +52,16 @@ public class HeapPageId implements PageId {
      *   ids are the same)
      */
     public boolean equals(Object o) {
+        if (this.equals(o)) return true;
+        //Check if the object is even an HeapPageId object
+        if (!(o instanceof HeapPageId)){
+            return false;
+        }
+        // Cast ( since it was a generic object to HeapPageId and since we know that it is an
+        //instance of HeapPage )
+        HeapPageId castheap = (HeapPageId) o;
+        return (castheap.tableId.equals(this.tableId) && castheap.pgNo.equals(this.pgNo)); 
+        }
         // some code goes here
         return false;
     }
