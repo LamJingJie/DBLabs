@@ -23,6 +23,9 @@ import java.util.concurrent.ConcurrentHashMap;
  * @Threadsafe, all fields are final
  */
 public class BufferPool {
+
+    private final ConcurrentHashMap<PageId,Page> bufferpoolcache;
+
     /** Bytes per page, including header. */
     private static final int DEFAULT_PAGE_SIZE = 4096;
 
@@ -40,6 +43,8 @@ public class BufferPool {
      */
     public BufferPool(int numPages) {
         // some code goes here
+        this.pageSize = numPages;
+        this.bufferpoolcache = new ConcurrentHashMap<>();
     }
     
     public static int getPageSize() {
@@ -73,8 +78,20 @@ public class BufferPool {
      */
     public  Page getPage(TransactionId tid, PageId pid, Permissions perm)
         throws TransactionAbortedException, DbException {
-        // some code goes here
-        return null;
+
+        if (this.bufferpoolcache.containsKey(pid)){
+            return this.bufferpoolcache.get(pid)
+        }
+
+        DbFile databasefile = Database.getCatalog().getDatabaseFile(pid.getTableId());\
+
+        Page page = dbFile.readPage(pid);
+
+        if (bufferpoolcache.size() >= numPages){
+            this.evictPage();
+        }
+        bufferpoolcache.put(pid,page);
+        return page;
     }
 
     /**
@@ -205,8 +222,14 @@ public class BufferPool {
      * Flushes the page to disk to ensure dirty pages are updated on disk.
      */
     private synchronized  void evictPage() throws DbException {
-        // some code goes here
+             // some code goes here
         // not necessary for lab1
+        for (PageId pid : bufferpoolcache.keySet()) {
+            bufferpoolcache.remove(pid);
+            return;
+        }
+        throw new DbException("No pages to evict!");
+   
     }
 
 }
