@@ -1,4 +1,5 @@
 package simpledb.storage;
+import java.util.Objects;
 
 /** Unique identifier for HeapPage objects. */
 public class HeapPageId implements PageId {
@@ -15,7 +16,7 @@ public class HeapPageId implements PageId {
      */
     public HeapPageId(int tableId, int pgNo) {
         this.tableId = tableId;
-        this.pgNo = pgNo
+        this.pgNo = pgNo;
     }
 
     /** @return the table associated with this PageId */
@@ -41,7 +42,7 @@ public class HeapPageId implements PageId {
      */
     public int hashCode() {
         // some code goes here
-        return objects.hash(tableId,pgNo);
+        return Objects.hash(tableId,pgNo);
     }
 
     /**
@@ -52,7 +53,7 @@ public class HeapPageId implements PageId {
      *   ids are the same)
      */
     public boolean equals(Object o) {
-        if (this.equals(o)) return true;
+        if (this == o)  return true;
         //Check if the object is even an HeapPageId object
         if (!(o instanceof HeapPageId)){
             return false;
@@ -60,11 +61,9 @@ public class HeapPageId implements PageId {
         // Cast ( since it was a generic object to HeapPageId and since we know that it is an
         //instance of HeapPage )
         HeapPageId castheap = (HeapPageId) o;
-        return (castheap.tableId.equals(this.tableId) && castheap.pgNo.equals(this.pgNo)); 
-        }
-        // some code goes here
-        return false;
+        return (castheap.tableId == this.tableId && castheap.pgNo== this.pgNo); 
     }
+
 
     /**
      *  Return a representation of this object as an array of

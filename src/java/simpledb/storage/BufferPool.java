@@ -80,14 +80,14 @@ public class BufferPool {
         throws TransactionAbortedException, DbException {
 
         if (this.bufferpoolcache.containsKey(pid)){
-            return this.bufferpoolcache.get(pid)
+            return this.bufferpoolcache.get(pid);
         }
 
-        DbFile databasefile = Database.getCatalog().getDatabaseFile(pid.getTableId());\
+        DbFile databasefile = Database.getCatalog().getDatabaseFile(pid.getTableId());
 
-        Page page = dbFile.readPage(pid);
+        Page page = databasefile.readPage(pid);
 
-        if (bufferpoolcache.size() >= numPages){
+        if (bufferpoolcache.size() >= pageSize){
             this.evictPage();
         }
         bufferpoolcache.put(pid,page);
