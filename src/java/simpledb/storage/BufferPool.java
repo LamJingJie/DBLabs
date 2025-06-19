@@ -1,5 +1,6 @@
 package simpledb.storage;
 
+import simpledb.common.Catalog;
 import simpledb.common.Database;
 import simpledb.common.Permissions;
 import simpledb.common.DbException;
@@ -8,8 +9,7 @@ import simpledb.transaction.TransactionAbortedException;
 import simpledb.transaction.TransactionId;
 
 import java.io.*;
-
-import java.util.concurrent.ConcurrentHashMap;
+import java.util.HashMap;
 
 /**
  * BufferPool manages the reading and writing of pages into memory from
@@ -24,7 +24,7 @@ import java.util.concurrent.ConcurrentHashMap;
  */
 public class BufferPool {
 
-    private final ConcurrentHashMap<PageId,Page> bufferpoolcache;
+    private final HashMap<PageId,Page> bufferpoolcache;
 
     /** Bytes per page, including header. */
     private static final int DEFAULT_PAGE_SIZE = 4096;
@@ -36,6 +36,7 @@ public class BufferPool {
     constructor instead. */
     public static final int DEFAULT_PAGES = 50;
 
+    public final int numPages;
     /**
      * Creates a BufferPool that caches up to numPages pages.
      *
@@ -43,8 +44,8 @@ public class BufferPool {
      */
     public BufferPool(int numPages) {
         // some code goes here
-        this.pageSize = numPages;
-        this.bufferpoolcache = new ConcurrentHashMap<>();
+        this.numPages = numPages;
+        this.bufferpoolcache = new HashMap<>();
     }
     
     public static int getPageSize() {
@@ -83,11 +84,15 @@ public class BufferPool {
             return this.bufferpoolcache.get(pid);
         }
 
-        DbFile databasefile = Database.getCatalog().getDatabaseFile(pid.getTableId());
+        int tableid = pid.getTableId();
+
+        Catalog databasecatalog = Database.getCatalog();
+
+        DbFile databasefile = databasecatalog.getDatabaseFile(tableid);
 
         Page page = databasefile.readPage(pid);
 
-        if (bufferpoolcache.size() >= pageSize){
+        if (bufferpoolcache.size() >= numPages){
             this.evictPage();
         }
         bufferpoolcache.put(pid,page);

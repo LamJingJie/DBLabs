@@ -297,6 +297,8 @@ public class HeapPage implements Page {
                 count++;
             }
         }
+
+        // some code goes here
         return count;
     }
 
@@ -307,10 +309,8 @@ public class HeapPage implements Page {
         // some code goes here
         int bIndex = i / 8;
         int offset = i % 8;
-        System.out.println("byteIndex: " + bIndex);
         //get the btye we need
-        byte btyeheader = header[bIndex];
-        System.out.println(btyeheader);
+        byte btyeheader = header[bIndex] ;
         //shift the bit that we wan till it becomes LSB  (this is the only way to extract , read one bit) 
         int shifted = btyeheader >> offset;
         //mask all other bits except the LSB 
@@ -319,6 +319,7 @@ public class HeapPage implements Page {
     }
 
     /**
+     * 
      * Abstraction to fill or clear a slot on this page.
      */
     private void markSlotUsed(int i, boolean value) {
