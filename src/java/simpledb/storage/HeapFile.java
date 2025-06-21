@@ -121,8 +121,9 @@ public class HeapFile implements DbFile {
      */
     public int numPages() {
         // some code goes here
-        // Number of pages is the length of this heapfile divided by the page size
-        int pages = (int) (f.length() / BufferPool.getPageSize());
+        // Number of pages is the length of this heapfile + pagesize-1, divided by the page size
+        // To ensure that we round up to the next page if there is any remaining data
+        int pages = (int) ((f.length() + BufferPool.getPageSize() - 1 )/ BufferPool.getPageSize());
         return pages;
     }
 
@@ -155,25 +156,39 @@ public class HeapFile implements DbFile {
         //We want an iterator that iterates through the pages of the heapfile, going through each tuple in each page
         // Methods: open(), close(), hasNext, next(), rewind()
         return new DbFileIterator(){
-            // Iterator iterates the tuples in the current page
-            private Iterator<Tuple> tupleIterator = null;
             private final int numPages = numPages();
             private int currentPageIndex = 0;
+            // Iterator iterates the tuples in the current page
+            private Iterator<Tuple> tupleIterator = null;
+            private boolean opened = false; 
 
             // Open method is to initialize iterator to initial state
             public void open() throws DbException, TransactionAbortedException {
                 // Initialize the current page index to 0 and tuple iterator to null
                 currentPageIndex = 0;
                 tupleIterator = null;
+                opened = true;
+                System.out.println("OPENED, numPages=" + numPages + ", currentPageIndex=" + currentPageIndex);
+
             }
 
             // Close method is to reset the iterator to closed state
             public void close() {
-                // Reset the tuple iterator to null, clean up memory for tables, wont allow access to methods: hasNext(), next(), rewind()
-                tupleIterator = null;
+                if (opened){ 
+                    currentPageIndex = numPages; // Indicate that no more pages left for hasNext();
+                    // Reset the tuple iterator to null, clean up memory for tables, wont allow access to methods: hasNext(), next(), rewind()
+                    tupleIterator = null;
+                    opened = false;
+                }
             }
 
             public boolean hasNext() throws DbException, TransactionAbortedException {
+                // System.out.println("opened=" + opened);
+
+                if (!opened) {
+                    return false; // If iterator is not opened, return false
+                }
+
                 // Check if tuple iterator exists and if it has a next tuple
                 if (tupleIterator != null && tupleIterator.hasNext()) {
                     return true;
@@ -182,10 +197,11 @@ public class HeapFile implements DbFile {
                 while (currentPageIndex < numPages) {
                     // Get the next page from the buffer pool
                     HeapPageId pid = new HeapPageId(getId(), currentPageIndex);
-                    Page page = Database.getBufferPool().getPage(null, pid, Permissions.READ_ONLY);
+                    Page page = Database.getBufferPool().getPage(tid, pid, Permissions.READ_ONLY);
                     // Create a new iterator for the tuples in this page
                     tupleIterator = ((HeapPage) page).iterator();
                     currentPageIndex++;
+
                 
                     if (tupleIterator.hasNext()) {
                         return true;
@@ -197,9 +213,8 @@ public class HeapFile implements DbFile {
 
             // Returns the next tuple in the iterator
             public Tuple next() throws DbException, TransactionAbortedException, NoSuchElementException {
-                // If there are no more tuples, throw exception
-                if (!hasNext()) {
-                    throw new NoSuchElementException("No more tuples left in the iterator");
+                if (!opened || tupleIterator == null || !tupleIterator.hasNext()) {
+                    throw new NoSuchElementException();
                 }
                 // Return the next tuple from the current page's iterator
                 return tupleIterator.next();
