@@ -112,7 +112,15 @@ public class SeqScan implements OpIterator {
      */
     public TupleDesc getTupleDesc() {
         // some code goes here
-        return Database.getCatalog().getTupleDesc(tableid);
+        TupleDesc original_td = Database.getCatalog().getTupleDesc(tableid);
+        Type[] typeAr = original_td.getFieldTypes(); // Get all types from original TupleDesc
+        String[] fieldAr = new String[original_td.numFields()]; // Instantiate array for the field names
+
+        // To create a new tupleDesc with same type array and update the field names array with the prefix tableAlias
+        for(int i =0; i < typeAr.length; i++){
+            fieldAr[i] = tableAlias + "." + original_td.getFieldName(i);
+        }
+        return new TupleDesc(typeAr, fieldAr);
     }
 
     public boolean hasNext() throws TransactionAbortedException, DbException {

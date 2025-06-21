@@ -134,6 +134,15 @@ public class TupleDesc implements Serializable {
         return this.items.get(i).fieldType;
     }
 
+    // Additional method for easier access to field types for SeqScan
+    public Type[] getFieldTypes() {
+        Type[] fieldTypes = new Type[this.items.size()];
+        for (int i = 0; i< this.items.size(); i++){
+            fieldTypes[i] = this.getFieldType(i);
+        }
+        return fieldTypes;
+    }
+
     /**
      * Find the index of the field with a given name.
      * 

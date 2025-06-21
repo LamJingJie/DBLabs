@@ -168,8 +168,6 @@ public class HeapFile implements DbFile {
                 currentPageIndex = 0;
                 tupleIterator = null;
                 opened = true;
-                System.out.println("OPENED, numPages=" + numPages + ", currentPageIndex=" + currentPageIndex);
-
             }
 
             // Close method is to reset the iterator to closed state
