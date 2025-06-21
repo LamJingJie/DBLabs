@@ -73,8 +73,11 @@ public class HeapPage implements Page {
     */
     private int getNumTuples() {        
         // some code goes here
-        return 0;
-
+        int pagesize = BufferPool.getPageSize();
+        int tuplesize = td.getSize();
+        int tuples_per_page = (int) Math.floor((pagesize * 8 )/(tuplesize * 8 + 1 ));
+         System.out.println("PageSize: " + pagesize + ", TupleSize: " + tuplesize + ", NumTuples: " + tuples_per_page);
+        return tuples_per_page;
     }
 
     /**
@@ -82,9 +85,10 @@ public class HeapPage implements Page {
      * @return the number of bytes in the header of a page in a HeapFile with each tuple occupying tupleSize bytes
      */
     private int getHeaderSize() {        
-        
+        int headerSize = (int) Math.ceil(this.numSlots/ 8.0);
         // some code goes here
-        return 0;
+        System.out.println("HeaderSize: " + headerSize);
+        return headerSize;
                  
     }
     
@@ -118,7 +122,7 @@ public class HeapPage implements Page {
      */
     public HeapPageId getId() {
     // some code goes here
-    throw new UnsupportedOperationException("implement this");
+    return pid;
     }
 
     /**
@@ -287,8 +291,15 @@ public class HeapPage implements Page {
      * Returns the number of empty slots on this page.
      */
     public int getNumEmptySlots() {
+        int count = 0;
+        for (int i=0; i < numSlots; i ++){
+            if(!isSlotUsed(i)){
+                count++;
+            }
+        }
+
         // some code goes here
-        return 0;
+        return count;
     }
 
     /**
@@ -296,10 +307,19 @@ public class HeapPage implements Page {
      */
     public boolean isSlotUsed(int i) {
         // some code goes here
-        return false;
+        int bIndex = i / 8;
+        int offset = i % 8;
+        //get the btye we need
+        byte btyeheader = header[bIndex] ;
+        //shift the bit that we wan till it becomes LSB  (this is the only way to extract , read one bit) 
+        int shifted = btyeheader >> offset;
+        //mask all other bits except the LSB 
+        int importantbitvalue = shifted & 1;
+        return importantbitvalue == 1;
     }
 
     /**
+     * 
      * Abstraction to fill or clear a slot on this page.
      */
     private void markSlotUsed(int i, boolean value) {
@@ -312,8 +332,13 @@ public class HeapPage implements Page {
      * (note that this iterator shouldn't return tuples in empty slots!)
      */
     public Iterator<Tuple> iterator() {
-        // some code goes here
-        return null;
+        List<Tuple> list = new ArrayList<>();
+        for (int i =0; i < numSlots; i++){
+            if(isSlotUsed(i) && tuples[i]==null){
+                list.add(tuples[i]);
+            }
+        }
+        return list.iterator();
     }
 
 }
