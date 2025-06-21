@@ -1,5 +1,6 @@
 package simpledb.storage;
 
+import simpledb.common.Catalog;
 import simpledb.common.Database;
 import simpledb.common.Permissions;
 import simpledb.common.DbException;
@@ -8,8 +9,7 @@ import simpledb.transaction.TransactionAbortedException;
 import simpledb.transaction.TransactionId;
 
 import java.io.*;
-
-import java.util.concurrent.ConcurrentHashMap;
+import java.util.HashMap;
 
 /**
  * BufferPool manages the reading and writing of pages into memory from
@@ -23,6 +23,9 @@ import java.util.concurrent.ConcurrentHashMap;
  * @Threadsafe, all fields are final
  */
 public class BufferPool {
+
+    private final HashMap<PageId,Page> bufferpoolcache;
+
     /** Bytes per page, including header. */
     private static final int DEFAULT_PAGE_SIZE = 4096;
 
@@ -33,6 +36,7 @@ public class BufferPool {
     constructor instead. */
     public static final int DEFAULT_PAGES = 50;
 
+    public final int numPages;
     /**
      * Creates a BufferPool that caches up to numPages pages.
      *
@@ -40,6 +44,8 @@ public class BufferPool {
      */
     public BufferPool(int numPages) {
         // some code goes here
+        this.numPages = numPages;
+        this.bufferpoolcache = new HashMap<>();
     }
     
     public static int getPageSize() {
@@ -73,8 +79,24 @@ public class BufferPool {
      */
     public  Page getPage(TransactionId tid, PageId pid, Permissions perm)
         throws TransactionAbortedException, DbException {
-        // some code goes here
-        return null;
+
+        if (this.bufferpoolcache.containsKey(pid)){
+            return this.bufferpoolcache.get(pid);
+        }
+
+        int tableid = pid.getTableId();
+
+        Catalog databasecatalog = Database.getCatalog();
+
+        DbFile databasefile = databasecatalog.getDatabaseFile(tableid);
+
+        Page page = databasefile.readPage(pid);
+
+        if (bufferpoolcache.size() >= numPages){
+            this.evictPage();
+        }
+        bufferpoolcache.put(pid,page);
+        return page;
     }
 
     /**
@@ -205,8 +227,14 @@ public class BufferPool {
      * Flushes the page to disk to ensure dirty pages are updated on disk.
      */
     private synchronized  void evictPage() throws DbException {
-        // some code goes here
+             // some code goes here
         // not necessary for lab1
+        for (PageId pid : bufferpoolcache.keySet()) {
+            bufferpoolcache.remove(pid);
+            return;
+        }
+        throw new DbException("No pages to evict!");
+   
     }
 
 }
