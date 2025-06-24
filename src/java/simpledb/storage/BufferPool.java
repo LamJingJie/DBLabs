@@ -93,7 +93,7 @@ public class BufferPool {
         Page page = databasefile.readPage(pid);
 
         if (bufferpoolcache.size() >= numPages){
-            this.evictPage();
+            throw new DbException("No pages to evict!");
         }
         bufferpoolcache.put(pid,page);
         return page;
@@ -229,11 +229,6 @@ public class BufferPool {
     private synchronized  void evictPage() throws DbException {
              // some code goes here
         // not necessary for lab1
-        for (PageId pid : bufferpoolcache.keySet()) {
-            bufferpoolcache.remove(pid);
-            return;
-        }
-        throw new DbException("No pages to evict!");
    
     }
 
