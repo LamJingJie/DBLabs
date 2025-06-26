@@ -166,7 +166,7 @@ public class Join extends Operator {
     @Override
     public OpIterator[] getChildren() {
         // some code goes here
-        OpIterator[] children = new OpIterator[1];
+        OpIterator[] children = new OpIterator[2];
         children[0] = child1;
         children[1] = child2;
         return children;
