@@ -25,13 +25,19 @@ public class Join extends Operator {
      * @param child2
      *            Iterator for the right(inner) relation to join
      */
+    JoinPredicate p;
+    OpIterator child1;
+    OpIterator child2;
     public Join(JoinPredicate p, OpIterator child1, OpIterator child2) {
         // some code goes here
+        this.p = p;
+        this.child1 = child1;
+        this.child2 = child2;
     }
 
     public JoinPredicate getJoinPredicate() {
         // some code goes here
-        return null;
+        return this.p;
     }
 
     /**
@@ -41,7 +47,8 @@ public class Join extends Operator {
      * */
     public String getJoinField1Name() {
         // some code goes here
-        return null;
+        int f1Index = p.getField1();
+        return this.child1.getTupleDesc().getFieldName(f1Index);
     }
 
     /**
@@ -51,7 +58,8 @@ public class Join extends Operator {
      * */
     public String getJoinField2Name() {
         // some code goes here
-        return null;
+        int f2Index = p.getField2();
+        return this.child2.getTupleDesc().getFieldName(f2Index);
     }
 
     /**
@@ -60,20 +68,31 @@ public class Join extends Operator {
      */
     public TupleDesc getTupleDesc() {
         // some code goes here
-        return null;
+        TupleDesc td1 = child1.getTupleDesc();
+        TupleDesc td2 = child2.getTupleDesc();
+        return TupleDesc.merge(td1, td2);
     }
 
     public void open() throws DbException, NoSuchElementException,
             TransactionAbortedException {
         // some code goes here
+        super.open();
+        child1.open();
+        child2.open();
     }
 
     public void close() {
         // some code goes here
+        super.close();
+        child1.close();
+        child2.close();
     }
 
-    public void rewind() throws DbException, TransactionAbortedException {
+    public void rewind() throws DbException, TransactionAbortedException, IllegalStateException {
         // some code goes here
+        child1.rewind();
+        currentT1Tuple = null; // Reset current tuple for child1
+        child2.rewind();
     }
 
     /**
@@ -94,20 +113,72 @@ public class Join extends Operator {
      * @return The next matching tuple.
      * @see JoinPredicate#filter
      */
-    protected Tuple fetchNext() throws TransactionAbortedException, DbException {
+
+     // Need to keep track of the current tuple from child1, reason being that
+     // we need to iterate through all tuples in child2 for each tuple in child1.
+     // .next() doesnt persist for every call to fetchNext(), so we need to store the current tuple
+    Tuple currentT1Tuple = null;
+    protected Tuple fetchNext() throws TransactionAbortedException, DbException, IllegalStateException {
         // some code goes here
+
+        if(currentT1Tuple == null) {
+            if(child1.hasNext()){
+                currentT1Tuple = child1.next();
+            }else{
+                return null; // since outer-join is not implemented, if child1 has no next, return null
+            }
+        }
+        
+        // Continue where we left of in child1
+        while(currentT1Tuple != null){
+            while (child2.hasNext()) {
+                Tuple t2 = child2.next();
+                if (p.filter(currentT1Tuple, t2)) {
+                    // Match found, create a new tuple with the combined fields
+                    Tuple res = new Tuple(getTupleDesc());
+
+                    // copy over fields from both tuples
+                    for (int i = 0; i < currentT1Tuple.getTupleDesc().numFields(); i++) {
+                        res.setField(i, currentT1Tuple.getField(i));
+                    }
+                    for (int i = 0; i < t2.getTupleDesc().numFields(); i++) {
+                        res.setField(currentT1Tuple.getTupleDesc().numFields() + i, t2.getField(i));
+                    }
+                    return res;
+                }
+            }
+            // If we reach here, it means we exhausted child2 for the current child1 tuple
+            // Reset child2 for the next iteration
+            child2.rewind();
+            if (child1.hasNext()) {
+                currentT1Tuple = child1.next();
+            } else {
+                // No more tuples in child1, reset currentT1Tuple to null
+                currentT1Tuple = null;
+                break; // Exit the loop since we have no more tuples to process
+            }
+        }
+
+        // No more matches
         return null;
     }
 
     @Override
     public OpIterator[] getChildren() {
         // some code goes here
-        return null;
+        OpIterator[] children = new OpIterator[2];
+        children[0] = child1;
+        children[1] = child2;
+        return children;
     }
 
     @Override
     public void setChildren(OpIterator[] children) {
         // some code goes here
+        if (children != null && children.length > 0){
+            this.child1 = children[0];
+            this.child2 = children[1];
+        }
     }
 
 }
