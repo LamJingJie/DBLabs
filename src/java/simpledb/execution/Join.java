@@ -114,9 +114,11 @@ public class Join extends Operator {
      * @see JoinPredicate#filter
      */
 
-     // Need to keep track of the current tuple from child1, reason being that
-     // we need to iterate through all tuples in child2 for each tuple in child1.
-     // .next() doesnt persist for every call to fetchNext(), so we need to store the current tuple
+    // Reason of having this variable:
+    // We need to keep track of the current tuple from child1 that we are processing.
+    // After we find a match and return a tuple, the next fetchNext call should continue
+    // from where it left off in child1. Meaning that if we found a match for A-1, then the 
+    // next call to fetchNext should continue with A-2, and not B-1.
     Tuple currentT1Tuple = null;
     protected Tuple fetchNext() throws TransactionAbortedException, DbException, IllegalStateException {
         // some code goes here
