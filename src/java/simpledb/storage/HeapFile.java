@@ -112,8 +112,15 @@ public class HeapFile implements DbFile {
 
     // see DbFile.java for javadocs
     public void writePage(Page page) throws IOException {
-        // some code goes here
-        // not necessary for lab1
+        int pageSize = BufferPool.getPageSize();
+        int pageNumber = page.getId().getPageNumber();
+        byte[] data = page.getPageData();
+
+        try (RandomAccessFile raf = new RandomAccessFile(f, "rw")) {
+            int position = pageNumber * pageSize;
+            raf.seek(position);
+            raf.write(data);
+        }
     }
 
     /**
@@ -130,17 +137,49 @@ public class HeapFile implements DbFile {
     // see DbFile.java for javadocs
     public List<Page> insertTuple(TransactionId tid, Tuple t)
             throws DbException, IOException, TransactionAbortedException {
-        // some code goes here
-        return null;
-        // not necessary for lab1
+      List<Page> modifiedPages = new ArrayList<>();
+
+        for (int i = 0; i < numPages(); i++) {
+            HeapPageId pid = new HeapPageId(getId(), i);
+            HeapPage page = (HeapPage) Database.getBufferPool().getPage(tid, pid, Permissions.READ_WRITE);
+
+            if (page.getNumEmptySlots() > 0) {
+                page.insertTuple(t);
+                modifiedPages.add(page);
+                return modifiedPages;
+            }
+        }
+
+        // All pages full, create a new one
+        HeapPageId newPid = new HeapPageId(getId(), numPages());
+        byte[] emptyPageData = HeapPage.createEmptyPageData();
+        HeapPage newPage = new HeapPage(newPid, emptyPageData);
+
+        newPage.insertTuple(t);
+        writePage(newPage); // persist the new page
+
+        // Now load it via BufferPool (so it's in the correct cache)
+        HeapPage loadedNewPage = (HeapPage) Database.getBufferPool().getPage(tid, newPid, Permissions.READ_WRITE);
+        modifiedPages.add(loadedNewPage);
+
+        return modifiedPages;
     }
 
     // see DbFile.java for javadocs
     public ArrayList<Page> deleteTuple(TransactionId tid, Tuple t) throws DbException,
             TransactionAbortedException {
-        // some code goes here
-        return null;
-        // not necessary for lab1
+        RecordId rid = t.getRecordId();
+        if (rid == null) {
+            throw new DbException("Tuple does not have a valid RecordId");
+        }
+
+        PageId pid = rid.getPageId();
+        HeapPage page = (HeapPage) Database.getBufferPool().getPage(tid, pid, Permissions.READ_WRITE);
+        page.deleteTuple(t);
+
+        ArrayList<Page> modifiedPages = new ArrayList<>();
+        modifiedPages.add(page);
+        return modifiedPages;
     }
 
     // see DbFile.java for javadocs
