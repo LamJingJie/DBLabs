@@ -10,6 +10,7 @@ import simpledb.transaction.TransactionId;
 
 import java.io.*;
 import java.util.HashMap;
+import java.util.List;
 
 /**
  * BufferPool manages the reading and writing of pages into memory from
@@ -159,8 +160,9 @@ public class BufferPool {
      */
     public void insertTuple(TransactionId tid, int tableId, Tuple t)
         throws DbException, IOException, TransactionAbortedException {
-        // some code goes here
-        // not necessary for lab1
+            DbFile dbFile = Database.getCatalog().getDatabaseFile(tableId);
+            List<Page> pages = dbFile.insertTuple(tid, t);
+            markpages(pages, tid);
     }
 
     /**
@@ -178,8 +180,18 @@ public class BufferPool {
      */
     public  void deleteTuple(TransactionId tid, Tuple t)
         throws DbException, IOException, TransactionAbortedException {
-        // some code goes here
-        // not necessary for lab1
+            int tableId = t.getRecordId().getPageId().getTableId();
+            DbFile dbFile = Database.getCatalog().getDatabaseFile(tableId);
+            List<Page> pages = dbFile.deleteTuple(tid, t);
+            markpages(pages, tid);
+    }
+
+    // added this function to mark pages as dirty and update the buffer pool cache
+    private void markpages(List<Page> pages, TransactionId tid) {
+        for (Page page : pages) {
+            page.markDirty(true, tid);
+            bufferpoolcache.put(page.getId(), page);
+        }
     }
 
     /**

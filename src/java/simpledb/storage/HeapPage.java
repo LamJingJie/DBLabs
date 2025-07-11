@@ -27,6 +27,8 @@ public class HeapPage implements Page {
 
     byte[] oldData;
     private final Byte oldDataLock= (byte) 0;
+    private boolean dirty = false;
+    private TransactionId dirtyTid = null;
 
     /**
      * Create a HeapPage from a set of bytes of data read from disk.
@@ -76,7 +78,6 @@ public class HeapPage implements Page {
         int pagesize = BufferPool.getPageSize();
         int tuplesize = td.getSize();
         int tuples_per_page = (int) Math.floor((pagesize * 8 )/(tuplesize * 8 + 1 ));
-         System.out.println("PageSize: " + pagesize + ", TupleSize: " + tuplesize + ", NumTuples: " + tuples_per_page);
         return tuples_per_page;
     }
 
@@ -87,7 +88,6 @@ public class HeapPage implements Page {
     private int getHeaderSize() {        
         int headerSize = (int) Math.ceil(this.numSlots/ 8.0);
         // some code goes here
-        System.out.println("HeaderSize: " + headerSize);
         return headerSize;
                  
     }
@@ -246,15 +246,23 @@ public class HeapPage implements Page {
     }
 
     /**
-     * Delete the specified tuple from the page; the corresponding header bit should be updated to reflect
-     *   that it is no longer stored on any page.
-     * @throws DbException if this tuple is not on this page, or tuple slot is
-     *         already empty.
-     * @param t The tuple to delete
+     * Deletes the specified tuple from the page;  the tuple should be updated to reflect
+     * that it is no longer stored on this page.
+     * @throws DbException if the tuple is not on this page or slot is already empty.
+     * @param t The tuple to delete.
      */
     public void deleteTuple(Tuple t) throws DbException {
-        // some code goes here
-        // not necessary for lab1
+        RecordId rid = t.getRecordId();
+        int tupleNumber = rid.getTupleNumber();
+
+        if (!rid.getPageId().equals(pid)) {
+            throw new DbException("Tuple is not on this page");
+        }
+        if (!isSlotUsed(tupleNumber) || tuples[tupleNumber] == null) {
+            throw new DbException("Tuple is not on this page or slot is already empty");
+        }
+        tuples[tupleNumber] = null; 
+        markSlotUsed(tupleNumber, false);
     }
 
     /**
@@ -265,8 +273,17 @@ public class HeapPage implements Page {
      * @param t The tuple to add.
      */
     public void insertTuple(Tuple t) throws DbException {
-        // some code goes here
-        // not necessary for lab1
+        for (int i = 0; i < numSlots; i++) {
+            if (!isSlotUsed(i)) {
+                // found an empty slot
+                tuples[i] = t;
+                RecordId rid = new RecordId(pid, i);
+                t.setRecordId(rid);
+                markSlotUsed(i,true);
+                return;
+            }
+        }
+        throw new DbException("No empty slots available in this page to insert the tuple");
     }
 
     /**
@@ -274,8 +291,12 @@ public class HeapPage implements Page {
      * that did the dirtying
      */
     public void markDirty(boolean dirty, TransactionId tid) {
-        // some code goes here
-	// not necessary for lab1
+        this.dirty = dirty;
+        if (dirty) {
+            dirtyTid = tid;
+        } else {
+            dirtyTid = null; 
+        }
     }
 
     /**
@@ -283,7 +304,9 @@ public class HeapPage implements Page {
      */
     public TransactionId isDirty() {
         // some code goes here
-	// Not necessary for lab1
+        if (dirty) {
+            return dirtyTid;
+        }
         return null;      
     }
 
@@ -323,8 +346,18 @@ public class HeapPage implements Page {
      * Abstraction to fill or clear a slot on this page.
      */
     private void markSlotUsed(int i, boolean value) {
-        // some code goes here
-        // not necessary for lab1
+        int bIndex = i / 8;
+        int offset = i % 8;
+
+        int mask = 1 << offset; 
+
+        if (value){
+            // set the bit to 1
+            header[bIndex] |= mask;
+        } else {
+            // set the bit to 0
+            header[bIndex] &= ~mask;
+        }
     }
 
     /**
