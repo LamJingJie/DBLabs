@@ -35,7 +35,7 @@ public class IntegerAggregator implements Aggregator {
 
     int gbfield; // index of the group-by field
     Type gbfieldtype; // type of the group-by field
-    int afield; // index of the aggregate field
+    int afield; // index of the aggregate field 
     Op what; // aggregation operator
     public IntegerAggregator(int gbfield, Type gbfieldtype, int afield, Op what) {
         // some code goes here

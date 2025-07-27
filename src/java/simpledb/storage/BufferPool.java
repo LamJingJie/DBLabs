@@ -92,8 +92,12 @@ public class BufferPool {
      * @param pid  the ID of the requested page
      * @param perm the requested permissions on the page
      */
-    public Page getPage(TransactionId tid, PageId pid, Permissions perm)
-            throws TransactionAbortedException, DbException {
+    private final LockManager lockManager = new LockManager();
+    public  Page getPage(TransactionId tid, PageId pid, Permissions perm)
+        throws TransactionAbortedException, DbException {
+        
+        lockManager.acquireLock(pid, tid, perm);
+        
 
         // Found in pool
         if (this.bufferpoolcache.containsKey(pid)) {
@@ -133,6 +137,7 @@ public class BufferPool {
     public void unsafeReleasePage(TransactionId tid, PageId pid) {
         // some code goes here
         // not necessary for lab1|lab2
+        lockManager.releaseLock(pid, tid);
     }
 
     /**
@@ -149,7 +154,7 @@ public class BufferPool {
     public boolean holdsLock(TransactionId tid, PageId p) {
         // some code goes here
         // not necessary for lab1|lab2
-        return false;
+        return lockManager.holdLock(p, tid);
     }
 
     /**
