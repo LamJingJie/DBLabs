@@ -11,6 +11,7 @@ import simpledb.transaction.TransactionId;
 import java.io.*;
 import java.util.HashMap;
 import java.util.List;
+import java.util.Set;
 import java.util.ArrayList;
 
 /**
@@ -145,9 +146,12 @@ public class BufferPool {
      *
      * @param tid the ID of the transaction requesting the unlock
      */
-    public void transactionComplete(TransactionId tid) {
+    public void transactionComplete(TransactionId tid) throws TransactionAbortedException {
         // some code goes here
         // not necessary for lab1|lab2
+
+        // Always commits
+        transactionComplete(tid, true);
     }
 
     /** Return true if the specified transaction has a lock on the specified page */
@@ -164,9 +168,36 @@ public class BufferPool {
      * @param tid    the ID of the transaction requesting the unlock
      * @param commit a flag indicating whether we should commit or abort
      */
-    public void transactionComplete(TransactionId tid, boolean commit) {
+    public void transactionComplete(TransactionId tid, boolean commit) throws TransactionAbortedException {
         // some code goes here
         // not necessary for lab1|lab2
+        for (PageId pid : lockManager.getPagesLockedBy(tid)) {
+            // If abort, revert changes made by transaction
+            // Restore to its on-disk state
+            try {
+                if (!commit) {
+                    // Get copy from disk
+                    DbFile dbFile = Database.getCatalog().getDatabaseFile(pid.getTableId());
+                    Page originalPage = dbFile.readPage(pid);
+                    // Replace the page in bufferpool with original page
+                    bufferpoolcache.put(pid, originalPage);
+                    // Reset back to clean, no transaction state
+                    originalPage.markDirty(false, null);
+                }
+
+                // Commit and Force: flush dirty pages to disk
+                else {
+                    flushPage(pid);
+                }
+            }
+            // Handle if have internal error or deadlock occurred
+            catch (IOException e) {
+                throw new TransactionAbortedException();
+            } finally {
+                lockManager.releaseLock(pid, tid);
+            }
+        }
+
     }
 
     /**
@@ -355,7 +386,7 @@ public class BufferPool {
         }
 
         // If no evictable page found after max attempts, throw exception
-       if (evictedPid == null) {
+        if (evictedPid == null) {
             throw new DbException("All pages are dirty, cannot evict any page");
         }
 
