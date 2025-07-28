@@ -3,7 +3,7 @@ import java.util.*;
 
 import simpledb.transaction.TransactionAbortedException;
 import simpledb.transaction.TransactionId;
-import simpledb.common.Permissions;;
+import simpledb.common.Permissions;
 
 /**
  * @Description: Implemented to resemble ReadWriteLock in Java
@@ -65,10 +65,15 @@ public class LockManager {
         return pageLocks != null && pageLocks.containsKey(tid);
     }
 
-    // Check if a page is holding to any lock used in a transaction
-    public boolean isHoldingLock(PageId pageId){
-        Set<TransactionId> tids = locks.get(pageId).keySet();
-        return tids != null && !tids.isEmpty();
+    //Helper method used in BufferPool to get all pages holding onto lock for this transaction
+    public Set<PageId> getPagesLockedBy(TransactionId tid) {
+        // Use set for unordered data, hash set to avoid duplicate page ids
+        Set<PageId> lockedPageIds = new HashSet<>();
+        for (Map.Entry<PageId, Map<TransactionId, Permissions>> entry : locks.entrySet()) {
+            if (entry.getValue().containsKey(tid)) {
+                lockedPageIds.add(entry.getKey());
+            }
+        }
+        return lockedPageIds;
     }
-    
 }
