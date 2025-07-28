@@ -93,11 +93,11 @@ public class BufferPool {
      * @param perm the requested permissions on the page
      */
     private final LockManager lockManager = new LockManager();
-    public  Page getPage(TransactionId tid, PageId pid, Permissions perm)
-        throws TransactionAbortedException, DbException {
-        
+
+    public Page getPage(TransactionId tid, PageId pid, Permissions perm)
+            throws TransactionAbortedException, DbException {
+
         lockManager.acquireLock(pid, tid, perm);
-        
 
         // Found in pool
         if (this.bufferpoolcache.containsKey(pid)) {
@@ -303,7 +303,9 @@ public class BufferPool {
         }
 
         PageId evictedPid = null;
-        // Check attempts to prevent infinite loop since the reference bits would get reset due to second chance
+
+        // Check attempts to prevent infinite loop since the reference bits would get
+        // reset due to second chance
         int attempts = 0;
         int maxAttempts = circularList.size() * 2;
 
@@ -316,7 +318,7 @@ public class BufferPool {
             PageId currentPid = circularList.get(clockPointer); // pid at current clock pointer
 
             // If current page not in buffer pool but still in list on accident
-            if (!bufferpoolcache.containsKey(currentPid)) { 
+            if (!bufferpoolcache.containsKey(currentPid)) {
                 circularList.remove(clockPointer);
                 referenceBits.remove(currentPid);
                 continue;
@@ -326,30 +328,37 @@ public class BufferPool {
             if (currentRefBit == null) {
                 throw new DbException("referenceBits is null for page: " + currentPid);
             }
+
+            // No Steal: Cannot evict a dirty page
+            // Or if page is holding lock,
+            // Skip over to next possible evictable page
             if (currentRefBit == 0) {
-                evictedPid = currentPid;
-                break;
-            } 
-            // Reference bit is 1, change to 0 giving it a second chance, move pointer to next
+                Page candidatePage = bufferpoolcache.get(currentPid);
+                // Not dirty and not holding lock, can evict
+                if (candidatePage.isDirty() == null || !lockManager.isHoldingLock(currentPid)) {
+                    evictedPid = currentPid;
+                    bufferpoolcache.remove(evictedPid);
+                    referenceBits.remove(evictedPid);
+                    circularList.remove(evictedPid);
+                    break;
+                }
+                // Skip if dirty or has lock
+                continue;
+            }
+            // Reference bit is 1, change to 0 giving it a second chance, move pointer to
+            // next
             else {
                 referenceBits.put(currentPid, 0);
-                clockPointer++;
             }
+            clockPointer++;
             attempts++;
         }
 
-        // If evicted page is dirty, flush it to disk first
-        Page evictedPage = bufferpoolcache.get(evictedPid);
-        if (evictedPage.isDirty() != null) {
-            try {
-                flushPage(evictedPid);
-            } catch (IOException e) {
-                throw new DbException("Failed to flush page with page id:" + evictedPid);
-            }
+        // If no evictable page found after max attempts, throw exception
+       if (evictedPid == null) {
+            throw new DbException("All pages are dirty, cannot evict any page");
         }
-        bufferpoolcache.remove(evictedPid);
-        referenceBits.remove(evictedPid);
-        circularList.remove(evictedPid);
+
     }
 
 }

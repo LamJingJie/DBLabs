@@ -64,5 +64,11 @@ public class LockManager {
         Map<TransactionId, Permissions> pageLocks = locks.get(pageId);
         return pageLocks != null && pageLocks.containsKey(tid);
     }
+
+    // Check if a page is holding to any lock used in a transaction
+    public boolean isHoldingLock(PageId pageId){
+        Set<TransactionId> tids = locks.get(pageId).keySet();
+        return tids != null && !tids.isEmpty();
+    }
     
 }
