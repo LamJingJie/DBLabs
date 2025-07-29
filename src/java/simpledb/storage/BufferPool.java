@@ -10,8 +10,10 @@ import simpledb.transaction.TransactionId;
 
 import java.io.*;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.ArrayList;
+import java.util.Set;
 
 /**
  * BufferPool manages the reading and writing of pages into memory from
@@ -93,11 +95,11 @@ public class BufferPool {
      * @param perm the requested permissions on the page
      */
     private final LockManager lockManager = new LockManager();
-    public  Page getPage(TransactionId tid, PageId pid, Permissions perm)
-        throws TransactionAbortedException, DbException {
-        
+
+    public Page getPage(TransactionId tid, PageId pid, Permissions perm)
+            throws TransactionAbortedException, DbException {
+
         lockManager.acquireLock(pid, tid, perm);
-        
 
         // Found in pool
         if (this.bufferpoolcache.containsKey(pid)) {
@@ -148,6 +150,9 @@ public class BufferPool {
     public void transactionComplete(TransactionId tid) {
         // some code goes here
         // not necessary for lab1|lab2
+
+        // Always commits
+        transactionComplete(tid, true);
     }
 
     /** Return true if the specified transaction has a lock on the specified page */
@@ -167,6 +172,36 @@ public class BufferPool {
     public void transactionComplete(TransactionId tid, boolean commit) {
         // some code goes here
         // not necessary for lab1|lab2
+
+        Set<PageId> lockedPageIds = new HashSet<>(lockManager.getPagesLockedBy(tid));
+        for (PageId pid : lockedPageIds) {
+            // If abort, revert changes made by transaction
+            // Restore to its on-disk state
+            try {
+                if (!commit) {
+                    // Get copy from disk
+                    DbFile dbFile = Database.getCatalog().getDatabaseFile(pid.getTableId());
+                    Page originalPage = dbFile.readPage(pid);
+                    discardPage(pid); // remove old page
+
+                    // Reset back to clean, no transaction state
+                    originalPage.markDirty(false, null);
+                    // Replace the page in bufferpool with original page
+                    bufferpoolcache.put(pid, originalPage);
+                    referenceBits.put(pid, 1);
+                    circularList.add(pid);
+                }
+                // Commit and Force: flush dirty pages to disk
+                else {
+                    flushPage(pid);
+                }
+            }
+            // Handle if have internal error or deadlock occurred
+            catch (IOException e) {
+            } finally {
+                lockManager.releaseLock(pid, tid);
+            }
+        }
     }
 
     /**
@@ -213,10 +248,24 @@ public class BufferPool {
     }
 
     // added this function to mark pages as dirty and update the buffer pool cache
-    private void markpages(List<Page> pages, TransactionId tid) {
+    private void markpages(List<Page> pages, TransactionId tid) throws DbException {
         for (Page page : pages) {
+            PageId pid = page.getId();
             page.markDirty(true, tid);
-            bufferpoolcache.put(page.getId(), page);
+
+            // If pid not in bufferpool yet, and bufferpool is full
+            if (!bufferpoolcache.containsKey(pid) && bufferpoolcache.size() >= numPages) {
+                evictPage();
+            }
+
+            bufferpoolcache.put(pid, page);
+
+            // Since add new page, set reference bit to 1 recently used, add to circular
+            // list
+            referenceBits.put(pid, 1);
+            if (!circularList.contains(pid)) {
+                circularList.add(pid);
+            }
         }
     }
 
@@ -287,6 +336,9 @@ public class BufferPool {
     public synchronized void flushPages(TransactionId tid) throws IOException {
         // some code goes here
         // not necessary for lab1|lab2
+        for (PageId pid : lockManager.getPagesLockedBy(tid)) {
+            flushPage(pid);
+        }
     }
 
     /**
@@ -303,7 +355,9 @@ public class BufferPool {
         }
 
         PageId evictedPid = null;
-        // Check attempts to prevent infinite loop since the reference bits would get reset due to second chance
+
+        // Check attempts to prevent infinite loop since the reference bits would get
+        // reset due to second chance
         int attempts = 0;
         int maxAttempts = circularList.size() * 2;
 
@@ -316,7 +370,7 @@ public class BufferPool {
             PageId currentPid = circularList.get(clockPointer); // pid at current clock pointer
 
             // If current page not in buffer pool but still in list on accident
-            if (!bufferpoolcache.containsKey(currentPid)) { 
+            if (!bufferpoolcache.containsKey(currentPid)) {
                 circularList.remove(clockPointer);
                 referenceBits.remove(currentPid);
                 continue;
@@ -326,30 +380,32 @@ public class BufferPool {
             if (currentRefBit == null) {
                 throw new DbException("referenceBits is null for page: " + currentPid);
             }
+
+            // No Steal: Cannot evict a dirty page
+            // Skip over to next possible evictable page
             if (currentRefBit == 0) {
-                evictedPid = currentPid;
-                break;
-            } 
-            // Reference bit is 1, change to 0 giving it a second chance, move pointer to next
+                Page candidatePage = bufferpoolcache.get(currentPid);
+                // Not dirty, can evict and discard
+                if (candidatePage.isDirty() == null) {
+                    discardPage(currentPid);
+                    evictedPid = currentPid;
+                    break;
+                }
+            }
+            // Reference bit is 1, change to 0 giving it a second chance, move pointer to
+            // next
             else {
                 referenceBits.put(currentPid, 0);
-                clockPointer++;
             }
+            clockPointer++;
             attempts++;
         }
 
-        // If evicted page is dirty, flush it to disk first
-        Page evictedPage = bufferpoolcache.get(evictedPid);
-        if (evictedPage.isDirty() != null) {
-            try {
-                flushPage(evictedPid);
-            } catch (IOException e) {
-                throw new DbException("Failed to flush page with page id:" + evictedPid);
-            }
+        // If no evictable page found after max attempts, throw exception
+        if (evictedPid == null) {
+            throw new DbException("All pages are dirty, cannot evict any page");
         }
-        bufferpoolcache.remove(evictedPid);
-        referenceBits.remove(evictedPid);
-        circularList.remove(evictedPid);
+
     }
 
 }
