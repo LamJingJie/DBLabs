@@ -382,7 +382,6 @@ public class BufferPool {
             }
 
             // No Steal: Cannot evict a dirty page
-            // Or if page is holding lock,
             // Skip over to next possible evictable page
             if (currentRefBit == 0) {
                 Page candidatePage = bufferpoolcache.get(currentPid);
