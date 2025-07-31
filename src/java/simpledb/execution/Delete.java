@@ -24,22 +24,21 @@ public class Delete extends Operator {
     private OpIterator child;
     private boolean hasDeleted;
     private TupleDesc tupleDesc;
-    
 
     /**
      * Constructor specifying the transaction that this delete belongs to as
      * well as the child to read from.
      * 
      * @param t
-     *            The transaction this delete runs in
+     *              The transaction this delete runs in
      * @param child
-     *            The child operator from which to read tuples for deletion
+     *              The child operator from which to read tuples for deletion
      */
     public Delete(TransactionId t, OpIterator child) {
         this.transactionId = t;
         this.child = child;
         this.hasDeleted = false;
-        this.tupleDesc = new TupleDesc( new Type[] { Type.INT_TYPE });
+        this.tupleDesc = new TupleDesc(new Type[] { Type.INT_TYPE });
         // some code goes here
     }
 
@@ -48,7 +47,7 @@ public class Delete extends Operator {
         return tupleDesc;
     }
 
-  public void open() throws DbException, TransactionAbortedException {
+    public void open() throws DbException, TransactionAbortedException {
         super.open();
         child.open();
         hasDeleted = false;
@@ -67,7 +66,6 @@ public class Delete extends Operator {
         hasDeleted = false;
     }
 
-
     /**
      * Deletes tuples as they are read from the child operator. Deletes are
      * processed via the buffer pool (which can be accessed via the
@@ -78,7 +76,8 @@ public class Delete extends Operator {
      * @see BufferPool#deleteTuple
      */
     protected Tuple fetchNext() throws TransactionAbortedException, DbException {
-        if (hasDeleted) return null;
+        if (hasDeleted)
+            return null;
         int count = 0;
         BufferPool bufferPool = Database.getBufferPool();
 
@@ -87,8 +86,12 @@ public class Delete extends Operator {
                 Tuple tuple = child.next();
                 bufferPool.deleteTuple(transactionId, tuple);
                 count++;
-            } catch (Exception e) {
-                throw new DbException("Insert failed: " + e.getMessage());
+            } catch (TransactionAbortedException e) {
+                throw e;
+            } catch (DbException e) {
+                throw e;
+            } catch (IOException e) {
+                throw new DbException("Delete failed due to IO error: " + e.getMessage());
             }
         }
         Tuple result = new Tuple(getTupleDesc());

@@ -2,7 +2,6 @@ package simpledb.storage;
 
 import java.util.*;
 
-import simpledb.transaction.Transaction;
 import simpledb.transaction.TransactionAbortedException;
 import simpledb.transaction.TransactionId;
 import simpledb.common.Permissions;
@@ -12,35 +11,46 @@ import simpledb.common.Permissions;
  */
 public class LockManager {
     private Map<PageId, Map<TransactionId, Permissions>> locks = new HashMap<>();
-    private Map<TransactionId, Set<TransactionId>> cycleGraph = new HashMap<>();
+    private Map<TransactionId, Set<TransactionId>> waitForGraph = new HashMap<>();
 
     // acquire lock, block if not available
     public synchronized void acquireLock(PageId pageId, TransactionId tid, Permissions perm)
             throws TransactionAbortedException {
         while (!grantLock(tid, pageId, perm)) {
+            Set<TransactionId> blockingTransactions = new HashSet<>();
+            Map<TransactionId, Permissions> pageLockMap = locks.get(pageId);
 
-            Set<TransactionId> blockers = getBlockers(pageId, tid,perm);
-
-            cycleGraph.put(tid, new HashSet<>(blockers));
-
-            if (detectCycleFrom(tid)) {
-                // Cycle detected, abort the transaction
-                removeAllEdgesOf(tid);
-                throw new TransactionAbortedException();
+            if (perm != Permissions.READ_ONLY && pageLockMap != null && !pageLockMap.isEmpty()) {
+                for (TransactionId t : pageLockMap.keySet()) {
+                    if (!t.equals(tid)) {
+                        blockingTransactions.add(t);
+                    }
+                }
+            } else if (perm == Permissions.READ_ONLY && pageLockMap != null && !pageLockMap.isEmpty()) {
+                for (Map.Entry<TransactionId, Permissions> entry : pageLockMap.entrySet()) {
+                    if (!entry.getKey().equals(tid) && entry.getValue() == Permissions.READ_WRITE) {
+                        blockingTransactions.add(entry.getKey());
+                    }
+                }
+            }
+            if (!blockingTransactions.isEmpty()) {
+                waitForGraph.put(tid, blockingTransactions);
+                if (hasCycleFrom(tid, waitForGraph)) {
+                    waitForGraph.remove(tid);
+                    throw new TransactionAbortedException();
+                }
             }
 
             try {
                 wait();
             } catch (InterruptedException e) {
-                removeAllEdgesOf(tid);
+                waitForGraph.remove(tid);
                 throw new TransactionAbortedException();
-            } finally {
-                // Clean up the cycle graph for this transaction
-                cycleGraph.remove(tid);
             }
         }
-        cycleGraph.remove(tid);
+        waitForGraph.remove(tid);
         locks.computeIfAbsent(pageId, _ -> new HashMap<>()).put(tid, perm);
+
     }
 
     // check if the lock can be granted
@@ -64,10 +74,6 @@ public class LockManager {
             }
             return true;
         }
-
-        // exclusive lock: only if no other locks or if transaction is the only one
-        // holding a shared lock on that object
-        // Upgrade shared lock to exclusive lock
         return false;
     }
 
@@ -78,21 +84,19 @@ public class LockManager {
             pageLocks.remove(tid);
             if (pageLocks.isEmpty())
                 locks.remove(pageId);
-            // notify waiting threads that a lock has been released
+            notifyAll(); // notify waiting threads that a lock has been released
         }
-        removeAllEdgesOf(tid);
-        notifyAll(); 
     }
 
     // check if a transaction holds a lock on a page
-    public synchronized boolean holdLock(PageId pageId, TransactionId tid) {
+    public boolean holdLock(PageId pageId, TransactionId tid) {
         Map<TransactionId, Permissions> pageLocks = locks.get(pageId);
         return pageLocks != null && pageLocks.containsKey(tid);
     }
 
     // Helper method used in BufferPool to get all pages holding onto lock for this
     // transaction
-    public synchronized Set<PageId> getPagesLockedBy(TransactionId tid) {
+    public Set<PageId> getPagesLockedBy(TransactionId tid) {
         // Use set for unordered data, hash set to avoid duplicate page ids
         Set<PageId> lockedPageIds = new HashSet<>();
         for (Map.Entry<PageId, Map<TransactionId, Permissions>> entry : locks.entrySet()) {
@@ -103,77 +107,46 @@ public class LockManager {
         return lockedPageIds;
     }
 
-    // private Set<TransactionId> getBlockers(PageId pageId, TransactionId tid) {
-    // Set<TransactionId> blockers = new HashSet<>();
-    // Map<TransactionId, Permissions> pageLocks = locks.get(pageId);
-    // if (pageLocks != null) {
-    // for (Map.Entry<TransactionId, Permissions> entry : pageLocks.entrySet()) {
-    // if (!entry.getKey().equals(tid)) {
-    // blockers.add(entry.getKey());
-    // }
-    // }
-    // }
-    // return blockers;
-    // }
+    enum Color {
+        WHITE, GRAY, BLACK
+    } // WHITE=unseen, GRAY=on path, BLACK=done
 
-    private Set<TransactionId> getBlockers(PageId pageId, TransactionId tid, Permissions perm) {
-        Map<TransactionId, Permissions> pageLocks = locks.get(pageId);
-        if (pageLocks == null || pageLocks.isEmpty())
-            return Collections.emptySet();
+    public boolean hasCycleFrom(TransactionId start, Map<TransactionId, Set<TransactionId>> waitFor) {
+        Map<TransactionId, Color> color = new HashMap<>();
 
-        Set<TransactionId> blockers = new HashSet<>();
-        boolean iHold = pageLocks.containsKey(tid); // for upgrade case
+        List<TransactionId> stack = new ArrayList<>();
+        List<Iterator<TransactionId>> iteration = new ArrayList<>();
 
-        for (Map.Entry<TransactionId, Permissions> e : pageLocks.entrySet()) {
-            TransactionId owner = e.getKey();
-            if (owner.equals(tid))
-                continue;
+        // Push start node
+        stack.add(start);
+        iteration.add(neighbors(start, waitFor).iterator());
+        color.put(start, Color.GRAY);
 
-            Permissions ownerPerm = e.getValue();
-
-            boolean conflict =
-                    // Write request conflicts with any other holder
-                    (perm == Permissions.READ_WRITE)
-                            // Read request conflicts only with existing writer
-                            || (perm == Permissions.READ_ONLY && ownerPerm == Permissions.READ_WRITE);
-
-            // Upgrade: if I already hold READ and now want WRITE, all *other* holders block
-            // me
-            if (!conflict && iHold && perm == Permissions.READ_WRITE) {
-                conflict = true;
+        while (!stack.isEmpty()) {
+            Iterator<TransactionId> it = iteration.get(iteration.size() - 1);
+            if (it.hasNext()) {
+                TransactionId nexttransationid = it.next();
+                Color c = color.getOrDefault(nexttransationid, Color.WHITE);
+                if (c == Color.WHITE) {
+                    color.put(nexttransationid, Color.GRAY);
+                    stack.add(nexttransationid);
+                    iteration.add(neighbors(nexttransationid, waitFor).iterator());
+                } else if (c == Color.GRAY) {
+                    return true;
+                } // BLACK means already finished; ignore
+            } else {
+                // Done exploring this node
+                iteration.remove(iteration.size() - 1);
+                TransactionId done = stack.remove(stack.size() - 1);
+                color.put(done, Color.BLACK);
             }
-
-            if (conflict)
-                blockers.add(owner);
         }
-
-        return blockers;
-    }
-
-    private boolean detectCycleFrom(TransactionId start) {
-        Set<TransactionId> visited = new HashSet<>();
-        Set<TransactionId> stack = new HashSet<>();
-        return dfs(start, visited, stack);
-    }
-
-    private boolean dfs(TransactionId u, Set<TransactionId> visited, Set<TransactionId> stack) {
-        if (!visited.add(u))
-            return false;
-        stack.add(u);
-        for (TransactionId v : cycleGraph.getOrDefault(u, Collections.emptySet())) {
-            if (!visited.contains(v) && dfs(v, visited, stack))
-                return true;
-            if (stack.contains(v))
-                return true; // back-edge → cycle
-        }
-        stack.remove(u);
         return false;
     }
 
-    private void removeAllEdgesOf(TransactionId tid) {
-        cycleGraph.remove(tid);
-        for (Set<TransactionId> tos : cycleGraph.values()) {
-            tos.remove(tid);
-        }
+    private Set<TransactionId> neighbors(TransactionId t,
+            Map<TransactionId, Set<TransactionId>> waitFor) {
+        return waitFor.getOrDefault(t, Collections.emptySet());
     }
+
 }
