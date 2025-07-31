@@ -85,14 +85,14 @@ public class LockManager {
     }
 
     // check if a transaction holds a lock on a page
-    public boolean holdLock(PageId pageId, TransactionId tid) {
+    public synchronized boolean holdLock(PageId pageId, TransactionId tid) {
         Map<TransactionId, Permissions> pageLocks = locks.get(pageId);
         return pageLocks != null && pageLocks.containsKey(tid);
     }
 
     // Helper method used in BufferPool to get all pages holding onto lock for this
     // transaction
-    public Set<PageId> getPagesLockedBy(TransactionId tid) {
+    public synchronized Set<PageId> getPagesLockedBy(TransactionId tid) {
         // Use set for unordered data, hash set to avoid duplicate page ids
         Set<PageId> lockedPageIds = new HashSet<>();
         for (Map.Entry<PageId, Map<TransactionId, Permissions>> entry : locks.entrySet()) {
