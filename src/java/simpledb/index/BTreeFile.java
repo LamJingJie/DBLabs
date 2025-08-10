@@ -188,7 +188,50 @@ public class BTreeFile implements DbFile {
                                        Field f)
 					throws DbException, TransactionAbortedException {
 		// some code goes here
-        return null;
+
+		// If find leaf page, return it
+		if(pid.pgcateg() == BTreePageId.LEAF){
+			Page leafPage = getPage(tid, dirtypages, pid, perm);
+			
+			// downcast to BTreeLeafPage
+			return (BTreeLeafPage) leafPage;
+		}
+
+		// If we are in internal page, need find correct leaf page/node
+		BTreeInternalPage internalPage = (BTreeInternalPage) getPage(tid, dirtypages, pid, Permissions.READ_ONLY);
+		Iterator<BTreeEntry> entryIterator = internalPage.iterator();
+
+		// if f is null, find the left-most leaf page
+		if(f == null){
+			if(entryIterator.hasNext()){
+				BTreeEntry entry = entryIterator.next();
+				return findLeafPage(tid, dirtypages, entry.getLeftChild(), perm, f);
+			}
+		}
+
+		// loop through entries (in the page) to find correct leaf page
+		while(entryIterator.hasNext()){
+			BTreeEntry entry = entryIterator.next();
+
+			// If key <= entry key, go to left child
+			if(f.compare(Op.LESS_THAN_OR_EQ, entry.getKey())){
+				return findLeafPage(tid, dirtypages,entry.getLeftChild(), perm, f);
+			}
+		}
+
+		// if all entries went through and f > all keys inside those entries
+		// Go to rightmost child of current entry
+		entryIterator = internalPage.iterator(); // reset iterator
+		BTreeEntry lastEntry = null;
+		while(entryIterator.hasNext()){
+			lastEntry = entryIterator.next();
+		}
+
+		if(lastEntry != null){
+			return findLeafPage(tid, dirtypages, lastEntry.getRightChild(), perm, f);
+		}
+
+        throw new DbException("Internel page has no entries currently");
 	}
 	
 	/**
