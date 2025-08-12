@@ -189,7 +189,10 @@ public class BufferPool {
                     // Replace the page in bufferpool with original page
                     bufferpoolcache.put(pid, originalPage);
                     referenceBits.put(pid, 1);
-                    circularList.add(pid);
+                    // Only add if not already in circular list
+                    if (!circularList.contains(pid)) {
+                        circularList.add(pid);
+                    }
                 }
                 // Commit and Force: flush dirty pages to disk
                 else {
@@ -346,11 +349,26 @@ public class BufferPool {
      * Flushes the page to disk to ensure dirty pages are updated on disk.
      */
     private synchronized void evictPage() throws DbException {
-        // some code goes here
-        // not necessary for lab1
+
+        // DEBUG: Print state of all pages in buffer pool
+        int cleanPages = 0;
+        int dirtyPages = 0;
+        for (PageId pid : bufferpoolcache.keySet()) {
+            Page page = bufferpoolcache.get(pid);
+            boolean isDirty = page.isDirty() != null;
+            if (isDirty) {
+                dirtyPages++;
+              
+            } else {
+                cleanPages++;
+
+            }
+        }
+      
 
         // Using clock replacement policy to evict out a page
         if (circularList.isEmpty()) {
+       
             throw new DbException("No pages in buffer pool cache to evict");
         }
 
@@ -361,16 +379,20 @@ public class BufferPool {
         int attempts = 0;
         int maxAttempts = circularList.size() * 2;
 
+   
+
         // Find a page with reference bit = 0, if not found, use second chance
         while (attempts < maxAttempts) {
             if (clockPointer >= circularList.size()) {
                 clockPointer = 0;
+
             }
 
             PageId currentPid = circularList.get(clockPointer); // pid at current clock pointer
 
             // If current page not in buffer pool but still in list on accident
             if (!bufferpoolcache.containsKey(currentPid)) {
+
                 circularList.remove(clockPointer);
                 referenceBits.remove(currentPid);
                 continue;
@@ -381,12 +403,14 @@ public class BufferPool {
                 throw new DbException("referenceBits is null for page: " + currentPid);
             }
 
+            Page candidatePage = bufferpoolcache.get(currentPid);
+
             // No Steal: Cannot evict a dirty page
             // Skip over to next possible evictable page
             if (currentRefBit == 0) {
-                Page candidatePage = bufferpoolcache.get(currentPid);
                 // Not dirty, can evict and discard
                 if (candidatePage.isDirty() == null) {
+                    
                     discardPage(currentPid);
                     evictedPid = currentPid;
                     break;
@@ -397,14 +421,16 @@ public class BufferPool {
             else {
                 referenceBits.put(currentPid, 0);
             }
-            clockPointer++;
+            if (evictedPid == null) {
+                clockPointer++;
+            }
             attempts++;
         }
 
         // If no evictable page found after max attempts, throw exception
         if (evictedPid == null) {
             throw new DbException("All pages are dirty, cannot evict any page");
-        }
+        } 
 
     }
 
