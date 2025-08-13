@@ -655,6 +655,7 @@ java.util.NoSuchElementException
 simpledb.index.BTreeLeafPageReverseIterator
 ||:simpledb.storage.BufferPool
 java.lang.Throwable
+java.lang.System
 simpledb.storage.LockManager
 java.util.HashMap
 java.lang.Integer
@@ -667,6 +668,7 @@ simpledb.transaction.TransactionId
 simpledb.common.Database
 simpledb.common.Permissions
 java.lang.String
+java.io.PrintStream
 simpledb.storage.PageId
 java.lang.invoke.MethodHandles$Lookup
 java.util.Iterator
@@ -899,7 +901,6 @@ java.lang.invoke.MethodHandles
 java.io.IOException
 java.lang.IllegalArgumentException
 java.io.File
-java.util.List
 simpledb.storage.HeapPageId
 simpledb.storage.HeapFile
 simpledb.storage.RecordId
@@ -1880,6 +1881,7 @@ simpledb.execution.SeqScan
 org.junit.Assert
 simpledb.transaction.TransactionAbortedException
 ||:simpledb.storage.LockManager
+java.lang.Throwable
 java.util.Map$Entry
 simpledb.storage.PageId
 java.lang.invoke.LambdaMetafactory
@@ -1892,10 +1894,12 @@ java.util.Set
 java.util.HashMap
 java.util.HashSet
 java.lang.InterruptedException
+simpledb.transaction.TransactionId
 java.util.Map
 simpledb.common.Permissions
 java.lang.Object
 simpledb.transaction.TransactionAbortedException
+java.util.Collections
 ||:simpledb.index.BTreeUtility$BTreeDeleter
 java.lang.Throwable
 simpledb.common.DbException
