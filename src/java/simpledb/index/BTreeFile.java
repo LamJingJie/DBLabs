@@ -1033,7 +1033,7 @@ public void stealFromRightInternalPage(TransactionId tid, Map<PageId, Page> dirt
 			BTreeInternalPage leftPage, BTreeInternalPage rightPage, BTreeInternalPage parent, BTreeEntry parentEntry)
 			throws DbException, IOException, TransactionAbortedException {
 
-		// Pull down the parent key between the two pages
+		// Get parent key so that it can be pulled down to the left page
 		Field key = parentEntry.getKey();
 
 		// Get rightmost child of leftPage
@@ -1042,7 +1042,6 @@ public void stealFromRightInternalPage(TransactionId tid, Map<PageId, Page> dirt
 		if (leftIter.hasNext()) {
 			rightmostLeftChildId = leftIter.next().getRightChild();
 		}
-
 		// Get leftmost child of rightPage
 		Iterator<BTreeEntry> rightIter = rightPage.iterator();
 		BTreePageId leftmostRightChildId = rightPage.getChildId(0);
@@ -1065,7 +1064,9 @@ public void stealFromRightInternalPage(TransactionId tid, Map<PageId, Page> dirt
 			leftPage.insertEntry(entry);
 		}
 		updateParentPointers(tid, dirtypages, leftPage);
-		setEmptyPage(tid, dirtypages, rightPage.getId().getPageNumber());
+		// Delete the entry in the parent corresponding to the two pages that are merging -
+		// deleteParentEntry() will be useful here
+		setEmptyPage(tid, dirtypages, rightPage.getId().getPageNumber()); // allow right page to be reused
 		deleteParentEntry(tid, dirtypages, leftPage, parent, parentEntry);
 	}
 	
