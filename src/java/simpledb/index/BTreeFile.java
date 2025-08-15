@@ -778,7 +778,7 @@ public void stealFromLeafPage(BTreeLeafPage page, BTreeLeafPage sibling,
 	 * @param parent - the parent of the internal page
 	 * @param leftEntry - the entry in the parent pointing to the given page and its left-sibling
 	 * @param rightEntry - the entry in the parent pointing to the given page and its right-sibling
-	 * @see #mergeInternalPages(TransactionId, Map, BTreeInternalPage, BTreeInternalPage, BTreeInternalPage, BTreeEntry)
+	 * @see #mergeInternalPages(TransactionId, Map, BTreeInternalPage, BTreeInternalPage, BTreeEntry, BTreeEntry)
 	 * @see #stealFromLeftInternalPage(TransactionId, Map, BTreeInternalPage, BTreeInternalPage, BTreeInternalPage, BTreeEntry)
 	 * @see #stealFromRightInternalPage(TransactionId, Map, BTreeInternalPage, BTreeInternalPage, BTreeInternalPage, BTreeEntry)
 	 * 
@@ -1033,28 +1033,39 @@ public void stealFromRightInternalPage(TransactionId tid, Map<PageId, Page> dirt
 			BTreeInternalPage leftPage, BTreeInternalPage rightPage, BTreeInternalPage parent, BTreeEntry parentEntry)
 			throws DbException, IOException, TransactionAbortedException {
 
-		// some code goes here
-		//
-		// Get parent key so that it can be pulled down to the left page
+		// Pull down the parent key between the two pages
 		Field key = parentEntry.getKey();
+
+		// Get rightmost child of leftPage
+		Iterator<BTreeEntry> leftIter = leftPage.reverseIterator();
+		BTreePageId rightmostLeftChildId = leftPage.getChildId(0);
+		if (leftIter.hasNext()) {
+			rightmostLeftChildId = leftIter.next().getRightChild();
+		}
+
+		// Get leftmost child of rightPage
+		Iterator<BTreeEntry> rightIter = rightPage.iterator();
 		BTreePageId leftmostRightChildId = rightPage.getChildId(0);
-		BTreePageId rightmostLeftChildId = leftPage.getChildId(leftPage.getNumEntries());
+		if (rightIter.hasNext()) {
+			leftmostRightChildId = rightIter.next().getLeftChild();
+		}
+
+		// Connector entry
 		BTreeEntry connectorEntry = new BTreeEntry(key, rightmostLeftChildId, leftmostRightChildId);
 		leftPage.insertEntry(connectorEntry);
 
-		// Move all the entries from the right page to the left page, update
-		// the parent pointers of the children in the entries that were moved,
-		// and make the right page available for reuse
-		Iterator<BTreeEntry> rightIterator = rightPage.iterator();
-		while (rightIterator.hasNext()) {
-			BTreeEntry entry = rightIterator.next();
+		// Move all entries from rightPage to leftPage
+		rightIter = rightPage.iterator();
+		while (rightIter.hasNext()) {
+			BTreeEntry entry = rightIter.next();
+			if (entry.getLeftChild() == null || entry.getRightChild() == null) {
+				throw new DbException("Entry has null child pointer");
+			}
 			rightPage.deleteKeyAndRightChild(entry);
 			leftPage.insertEntry(entry);
 		}
 		updateParentPointers(tid, dirtypages, leftPage);
-		setEmptyPage(tid, dirtypages, rightPage.getId().getPageNumber()); // allow right page to be reused
-		// Delete the entry in the parent corresponding to the two pages that are merging -
-		// deleteParentEntry() will be useful here
+		setEmptyPage(tid, dirtypages, rightPage.getId().getPageNumber());
 		deleteParentEntry(tid, dirtypages, leftPage, parent, parentEntry);
 	}
 	
