@@ -731,17 +731,18 @@ public void stealFromLeafPage(BTreeLeafPage page, BTreeLeafPage sibling,
 
     if (page.getNumTuples() >= targetForPage) {
     } else {
-        int toSteal = targetForPage - page.getNumTuples();
+        int emptySlots = page.getNumEmptySlots();
+        int toSteal = Math.min(targetForPage - page.getNumTuples(), emptySlots);
         List<Tuple> picked = new ArrayList<>(toSteal);
-		boolean isStealing = picked.size() < toSteal;
+
         if (isRightSibling) {
-            Iterator<Tuple> iter = sibling.iterator(); 
-            while (iter.hasNext() && isStealing) {
+            Iterator<Tuple> iter = sibling.iterator();
+            while (iter.hasNext() && picked.size() < toSteal) {
                 picked.add(iter.next());
             }
         } else {
-            Iterator<Tuple> iter = sibling.reverseIterator(); 
-            while (iter.hasNext() && isStealing) {
+            Iterator<Tuple> iter = sibling.reverseIterator();
+            while (iter.hasNext() && picked.size() < toSteal) {
                 picked.add(iter.next());
             }
             Collections.reverse(picked);
@@ -853,7 +854,7 @@ public void stealFromLeftInternalPage(TransactionId tid, Map<PageId, Page> dirty
         leftSibling.deleteKeyAndRightChild(leftLast);
         BTreePageId movedChildId = leftLast.getRightChild();
 		Iterator<BTreeEntry> pageIter = page.iterator();
-        BTreePageId firstchild_pageID = getFirst_lastchild(pageIter, page);
+        BTreePageId firstchild_pageID = getFirst_lastchild(pageIter, page,"left");
 
         BTreeEntry down = new BTreeEntry(parentEntry.getKey(), firstchild_pageID, firstchild_pageID);
         down.setLeftChild(movedChildId);
@@ -884,12 +885,16 @@ private boolean treeBalanced(BTreeInternalPage page, BTreeInternalPage left_righ
     return false;
 }
 
-private BTreePageId getFirst_lastchild(Iterator<BTreeEntry> page_iter ,BTreeInternalPage page){
+private BTreePageId getFirst_lastchild(Iterator<BTreeEntry> page_iter ,BTreeInternalPage page, String left_right){
 	BTreePageId first_lastchild_pageID;
 	if (!page_iter.hasNext()) {
 		first_lastchild_pageID = page.getChildId(0);
 	} else {
-		first_lastchild_pageID = page_iter.next().getLeftChild();
+		if (left_right.equals("left")) {
+			first_lastchild_pageID = page_iter.next().getLeftChild();
+		} else {
+			first_lastchild_pageID = page_iter.next().getRightChild();
+		}
 	}
 	return first_lastchild_pageID;
 }
@@ -914,26 +919,25 @@ private BTreePageId getFirst_lastchild(Iterator<BTreeEntry> page_iter ,BTreeInte
 public void stealFromRightInternalPage(TransactionId tid, Map<PageId, Page> dirtypages,
         BTreeInternalPage page, BTreeInternalPage rightSibling, BTreeInternalPage parent,
         BTreeEntry pEntry) throws DbException, TransactionAbortedException {
-		
+
     if (treeBalanced(page, rightSibling)) {
-        return; 
+        return;
     }
 
-    while (page.getNumEntries() <= ( (page.getNumEntries() + rightSibling.getNumEntries()) / 2)) {
-        // 1) Grab the FIRST entry from the right sibling (smallest key there)
+    while (page.getNumEntries() < ( (page.getNumEntries() + rightSibling.getNumEntries()) / 2)) {
+
         Iterator<BTreeEntry> rit = rightSibling.iterator();
         if (!rit.hasNext()) break; 
         BTreeEntry rightFirst = rit.next();
 
 		 Iterator<BTreeEntry> pageIter_reverse = page.reverseIterator();
-        BTreePageId pageLastChildId = getFirst_lastchild(pageIter_reverse, page);
+        BTreePageId pageLastChildId = getFirst_lastchild(pageIter_reverse, page, "right");
         BTreePageId moveChildID = rightFirst.getLeftChild();
 
         BTreeEntry down = new BTreeEntry(pEntry.getKey(), moveChildID, moveChildID);
         down.setLeftChild(pageLastChildId);
         down.setRightChild(moveChildID);
         page.insertEntry(down);
-
         pEntry.setKey(rightFirst.getKey());
         parent.updateEntry(pEntry);
         rightSibling.deleteKeyAndLeftChild(rightFirst);
